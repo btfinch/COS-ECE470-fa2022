@@ -1,9 +1,11 @@
 use serde::{Serialize, Deserialize};
 
+
 // 20-byte address
 #[derive(Eq, PartialEq, Serialize, Deserialize, Clone, Hash, Default, Copy)]
 pub struct Address([u8; 20]);
 
+// create Address from a slice of length 20, type u8
 impl std::convert::From<&[u8; 20]> for Address {
     fn from(input: &[u8; 20]) -> Address {
         let mut buffer: [u8; 20] = [0; 20];
@@ -11,7 +13,7 @@ impl std::convert::From<&[u8; 20]> for Address {
         Address(buffer)
     }
 }
-
+// create Address from an array
 impl std::convert::From<[u8; 20]> for Address {
     fn from(input: [u8; 20]) -> Address {
         Address(input)
@@ -45,10 +47,26 @@ impl std::fmt::Debug for Address {
         )
     }
 }
-
+// use SHA256 (from ring crate) to hash the input bytes, and takes the last 20 bytes and convert them into a Address struct. 
+// questions: 
+// how long can bytes be? Do I need to perform multiple hashes if the public key is too long?
+// -> I think bytes can be 768 bits and digest output will be 265 bits
+// 
+use ring::{digest};
 impl Address {
     pub fn from_public_key_bytes(bytes: &[u8]) -> Address {
-        unimplemented!()
+        let big_hash = digest::digest(&digest::SHA256, bytes);
+        let mut big_hash_slice: &[u8] = big_hash.as_ref();
+        let mut hashArray: [u8; 20] = [0; 20];
+        let mut counter: usize = 12;
+        for i in hashArray.iter_mut(){
+            *i = *big_hash_slice.get(counter).unwrap(); // would using match fix this?
+            counter = counter+1;
+        }
+        Address::from(hashArray)
+
+
+
     }
 }
 // DO NOT CHANGE THIS COMMENT, IT IS FOR AUTOGRADER. BEFORE TEST

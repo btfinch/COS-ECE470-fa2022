@@ -1,9 +1,15 @@
 use serde::{Serialize,Deserialize};
-use ring::signature::{Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm, EdDSAParameters};
+use ring::signature::{Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm, EdDSAParameters, self};
 use rand::Rng;
+
+use super::address::Address;
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Transaction {
+    sender: Address,
+    reciever: Address,
+    value: i32,
+
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
@@ -11,18 +17,38 @@ pub struct SignedTransaction {
 }
 
 /// Create digital signature of a transaction
+/// Do i need to edit for bigger transactions? -> SHA256 can handle any length automatically
 pub fn sign(t: &Transaction, key: &Ed25519KeyPair) -> Signature {
-    unimplemented!()
+    let serial_transaction = serde_json::to_string(t);
+    let sig = key.sign(serial_transaction.unwrap().as_bytes());
+    sig
 }
 
 /// Verify digital signature of a transaction, using public key instead of secret key
 pub fn verify(t: &Transaction, public_key: &[u8], signature: &[u8]) -> bool {
-    unimplemented!()
+    let serial_transaction = serde_json::to_string(t);
+    let good_public_key = ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, public_key);
+    good_public_key.verify(serial_transaction.unwrap().as_bytes(),signature).is_ok()
+    
 }
-
+use crate::types::address;
 #[cfg(any(test, test_utilities))]
 pub fn generate_random_transaction() -> Transaction {
-    unimplemented!()
+    fn generate_random_address() -> Address{
+        let rng = ring::rand::SystemRandom::new();
+        let pkcs8_thing = ring::signature::Ed25519KeyPair::generate_pkcs8(&rng);
+        let key_pair     = ring::signature::Ed25519KeyPair::from_pkcs8(pkcs8_thing.unwrap().as_ref()).unwrap();
+        let public_key_bytes = key_pair.public_key();
+        let generated = Address::from_public_key_bytes(public_key_bytes.as_ref());
+        generated
+    }
+    let address1 = generate_random_address();
+    let address2 = generate_random_address();
+    let mut rng = rand::thread_rng();
+    let val: i32 = rng.gen();
+    let rand_transact = Transaction {sender: address1, reciever: address2, value: val};
+    rand_transact
+    
 }
 
 // DO NOT CHANGE THIS COMMENT, IT IS FOR AUTOGRADER. BEFORE TEST
