@@ -3,27 +3,126 @@ use super::hash::{Hashable, H256};
 /// A Merkle tree.
 #[derive(Debug, Default)]
 pub struct MerkleTree {
+    tree_vector: Vec<Vec<H256>>,
+    levels: u8,
 }
+
+use ring::{digest};
+fn hash_pairs(old_vec:&Vec<H256>) -> Vec<H256>{
+    let mut new_vec: Vec<H256> = vec!();
+    let mut temp = &old_vec[0];
+    let mut counter: u8 = 0;
+    
+    for x in old_vec { // Check types and referencing
+        if counter%2 ==0 {
+            temp = x;
+        }
+        else {
+            //hash temp and current and then add it to the new vector
+            let x_array = x.as_ref();
+            let temp_array= temp.as_ref();
+            let both = [temp_array, x_array].concat();
+            let both_slice = both.as_slice();
+            let both_hash = digest::digest(&digest::SHA256, both_slice);
+            let hash_H256 = H256::from(both_hash);
+            println!("{:?}",hash_H256);
+
+            // let hash_H256 = both_slice.hash(); ? Why doesn't this work?
+            new_vec.push(hash_H256);
+
+        }
+        counter = counter+1;
+
+    }
+    new_vec
+
+}
+
 
 impl MerkleTree {
     pub fn new<T>(data: &[T]) -> Self where T: Hashable, {
-        unimplemented!()
-    }
+        let mut lev: u8 = 0;
+        let mut length: usize = data.len(); // does this output 4? for for elements -> yes
+        let mut vector: Vec<H256> = vec!();
+        let mut output: Vec<Vec<H256>> = vec!();
+        for i in data{
+            vector.push(i.hash()); //is this ok?
+        }
+        while length >= 2{
+            if length%2 ==1{
+                vector.push(vector[length-1]);
+                length = length +1;
+            
+            } 
+            let mut out_push = vec!();
+            for element in vector.iter(){
+                out_push.push(*element);
+            }
+            output.push(out_push);
+            vector = hash_pairs(&vector); // is this ok?
+            length = length/2;
+            lev = lev + 1;
+
+        }
+        let mut out_push2 = vec!();
+            for element in vector.iter(){
+                out_push2.push(*element);
+            }
+            output.push(out_push2);
+
+        MerkleTree { tree_vector: output, levels: lev }
+
+        }
+    
 
     pub fn root(&self) -> H256 {
-        unimplemented!()
+        self.tree_vector[self.levels as usize][0] //figure out how to use self
+        // println!("{}",self.tree_vector[self.levels as usize][0])
     }
 
     /// Returns the Merkle Proof of data at index i
-    pub fn proof(&self, index: usize) -> Vec<H256> {
-        unimplemented!()
+    pub fn proof(&self, index: usize) -> Vec<H256> { // is self a merkel tree (where self T: MerkelTree)
+        let mut output: Vec<H256> = vec!(); // is it vec!() or vec![] and does it matter?
+        let mut ind = index;
+        for i in 0..self.levels{ // probably will have to change i type
+            if ind%2 == 1{
+                output.push(self.tree_vector[i as usize][(ind-1) as usize]);
+                ind = ind -1
+            }
+            else{
+                output.push(self.tree_vector[i as usize][ind+1]);
+            }
+            ind = ind/2
+        }
+        output
     }
-}
 
+}
 /// Verify that the datum hash with a vector of proofs will produce the Merkle root. Also need the
 /// index of datum and `leaf_size`, the total number of leaves.
 pub fn verify(root: &H256, datum: &H256, proof: &[H256], index: usize, leaf_size: usize) -> bool {
-    unimplemented!()
+    // start with datum, based on index value, hash left or hash right until you get the root
+    let mut gen_root: H256 = *datum;
+    let mut ind = index;
+    for x in proof{
+        if ind%2 == 1{ //right side
+            let both = [x.as_ref(), gen_root.as_ref()].concat();
+            let both_slice = both.as_slice();
+            let both_hash = digest::digest(&digest::SHA256, both_slice);
+            let hash_H256 = H256::from(both_hash);
+            gen_root = hash_H256;
+        }
+        else { // left side
+            let both = [gen_root.as_ref(), x.as_ref()].concat();
+            let both_slice = both.as_slice();
+            let both_hash = digest::digest(&digest::SHA256, both_slice);
+            let hash_H256 = H256::from(both_hash);
+            gen_root = hash_H256;
+        }
+    }
+
+    gen_root == *root
+    
 }
 // DO NOT CHANGE THIS COMMENT, IT IS FOR AUTOGRADER. BEFORE TEST
 
