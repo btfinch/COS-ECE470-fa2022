@@ -4,7 +4,7 @@ use super::hash::{Hashable, H256};
 #[derive(Debug, Default)]
 pub struct MerkleTree {
     tree_vector: Vec<Vec<H256>>,
-    levels: u8,
+    levels: u8, //the highest level of Merkel Tree, (index starts at 0)
 }
 
 use ring::{digest};
@@ -45,8 +45,16 @@ impl MerkleTree {
         let mut length: usize = data.len(); // does this output 4? for for elements -> yes
         let mut vector: Vec<H256> = vec!();
         let mut output: Vec<Vec<H256>> = vec!();
+        
+
         for i in data{
             vector.push(i.hash()); //is this ok?
+        }
+        if length == 0{
+            let zeros: [u8; 32] = [0;32];
+            let h_zeros: H256 = H256::from(zeros);
+            vector.push(h_zeros);
+
         }
         while length >= 2{
             if length%2 ==1{
@@ -81,6 +89,8 @@ impl MerkleTree {
     }
 
     /// Returns the Merkle Proof of data at index i
+    /// 
+    /// Might need to modify proof so that it can handle an input with a levels value of 0 (this means there is only 1 level with one H256)
     pub fn proof(&self, index: usize) -> Vec<H256> { // is self a merkel tree (where self T: MerkelTree)
         let mut output: Vec<H256> = vec!(); // is it vec!() or vec![] and does it matter?
         let mut ind = index;

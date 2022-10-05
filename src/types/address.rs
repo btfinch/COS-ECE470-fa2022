@@ -58,7 +58,7 @@ impl Address {
         let big_hash = digest::digest(&digest::SHA256, bytes);
         let mut big_hash_slice: &[u8] = big_hash.as_ref();
         let mut hashArray: [u8; 20] = [0; 20];
-        let mut counter: usize = 12;
+        let mut counter: usize = 12; 
         for i in hashArray.iter_mut(){
             *i = *big_hash_slice.get(counter).unwrap(); // would using match fix this?
             counter = counter+1;

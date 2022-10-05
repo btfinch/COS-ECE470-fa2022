@@ -3,6 +3,9 @@ use ring::signature::{Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm,
 use rand::Rng;
 
 use super::address::Address;
+use crate::types::hash::{H256, Hashable};
+
+
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Transaction {
@@ -14,7 +17,19 @@ pub struct Transaction {
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct SignedTransaction {
+    transaction: Transaction,
+    signature: Vec<u8>,
+    public_key: Vec<u8>,
+    
 }
+
+impl Hashable for SignedTransaction{
+    fn hash(&self) -> H256 {
+        let serial_signed = serde_json::to_string(self);
+        ring::digest::digest(&ring::digest::SHA256, serial_signed.unwrap().as_bytes()).into()
+    }
+}
+
 
 /// Create digital signature of a transaction
 /// Do i need to edit for bigger transactions? -> SHA256 can handle any length automatically
@@ -22,6 +37,11 @@ pub fn sign(t: &Transaction, key: &Ed25519KeyPair) -> Signature {
     let serial_transaction = serde_json::to_string(t);
     let sig = key.sign(serial_transaction.unwrap().as_bytes());
     sig
+}
+
+pub fn sig_to_vec(signature: Signature) -> Vec<u8>{
+    let signature_vector: Vec<u8> = signature.as_ref().to_vec();
+    signature_vector
 }
 
 /// Verify digital signature of a transaction, using public key instead of secret key
