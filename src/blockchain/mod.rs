@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 pub struct Blockchain {
     pub map: HashMap<H256, Block>,
+    // Additional hashmap to store the level number of each block with their hash
     pub level_map: HashMap<H256, u64>,
     pub tip_hash: H256,
     pub tip_level: u64, //genesis, level 0

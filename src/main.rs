@@ -81,8 +81,15 @@ fn main() {
     worker_ctx.start();
 
     // start the miner
-    let (miner_ctx, miner, finished_block_chan) = miner::new();
-    let miner_worker_ctx = miner::worker::Worker::new(&server, finished_block_chan);
+    let blockchain_3 = Blockchain::new();
+    let blockchain_4 = Arc::new(Mutex::new(blockchain_3));
+    let (miner_ctx, miner, finished_block_chan) = miner::new(&blockchain_4);
+
+    // new lines:
+    let blockchain_1 = Blockchain::new();
+    let blockchain_2 = Arc::new(Mutex::new(blockchain_1));
+
+    let miner_worker_ctx = miner::worker::Worker::new(&server, finished_block_chan,&blockchain_2); // let miner_worker_ctx = miner::worker::Worker::new(&server, finished_block_chan);
     miner_ctx.start();
     miner_worker_ctx.start();
 

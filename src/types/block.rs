@@ -67,6 +67,20 @@ pub fn generate_random_block_1(parent: &H256) -> Block {
 
 }
 
+pub fn generate_random_block_2(parent: &H256, difficulty: &H256) -> Block {
+    let noncy: u32 = rand::random();
+    let timy = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
+    let empty: Vec<H256> = Vec::new();
+    let merkly = MerkleTree::new(&empty).root();
+    let heady= Header{parent: *parent, nonce: noncy, difficulty: *difficulty, timestamp: timy, merkle_root: merkly};
+    let vec:Vec<SignedTransaction> = Vec::new();
+    let no_content = Content(vec);
+    let block = Block{header: heady, content: no_content};
+    block
+
+
+}
+
 #[cfg(any(test, test_utilities))]
 pub fn generate_random_block(parent: &H256) -> Block {
     let noncy: u32 = rand::random();

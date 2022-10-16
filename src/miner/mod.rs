@@ -7,7 +7,15 @@ use std::time;
 
 use std::thread;
 
+use crate::types::block;
 use crate::types::block::Block;
+
+use std::sync::{Arc, Mutex};
+use crate::blockchain::Blockchain;
+use crate::types::hash::{H256, Hashable};
+
+use crate::types::block::{generate_random_block_2};
+
 
 enum ControlSignal {
     Start(u64), // the number controls the lambda of interval between block generation
@@ -26,6 +34,7 @@ pub struct Context {
     control_chan: Receiver<ControlSignal>,
     operating_state: OperatingState,
     finished_block_chan: Sender<Block>,
+    blockchain: Arc<Mutex<Blockchain>>,
 }
 
 #[derive(Clone)]
@@ -34,14 +43,15 @@ pub struct Handle {
     control_chan: Sender<ControlSignal>,
 }
 
-pub fn new() -> (Context, Handle, Receiver<Block>) {
+pub fn new(blockchain: &Arc<Mutex<Blockchain>>) -> (Context, Handle, Receiver<Block>) {
     let (signal_chan_sender, signal_chan_receiver) = unbounded();
     let (finished_block_sender, finished_block_receiver) = unbounded();
-
+    let blockchain_clone = Arc::clone(blockchain);
     let ctx = Context {
         control_chan: signal_chan_receiver,
         operating_state: OperatingState::Paused,
         finished_block_chan: finished_block_sender,
+        blockchain: blockchain_clone, // am I allowed to have two variables with the same name like this?
     };
 
     let handle = Handle {
@@ -53,7 +63,9 @@ pub fn new() -> (Context, Handle, Receiver<Block>) {
 
 #[cfg(any(test,test_utilities))]
 fn test_new() -> (Context, Handle, Receiver<Block>) {
-    new()
+    let new_bc = Blockchain::new();
+    let wrapped_bc = Arc::new(Mutex::new(new_bc));
+    new(&wrapped_bc)
 }
 
 impl Handle {
@@ -84,6 +96,9 @@ impl Context {
     }
 
     fn miner_loop(&mut self) {
+
+        let mut c_blockchain = Arc::clone(&self.blockchain); 
+        let mut parent = c_blockchain.lock().unwrap().tip();
         // main mining loop
         loop {
             // check and react to control signals
@@ -120,7 +135,7 @@ impl Context {
                                 self.operating_state = OperatingState::Run(i);
                             }
                             ControlSignal::Update => {
-                                unimplemented!()
+                                unimplemented!() // here I need to check what the new blockchain is and get the tip: How do I get the new blockchain?  
                             }
                         };
                     }
@@ -133,7 +148,32 @@ impl Context {
             }
 
             // TODO for student: actual mining, create a block
+            let mut dify: H256 = [255u8; 32].into();
+            
+            let c_parent = parent.clone();
+            let c1_parent = parent.clone();
+            // let d_blockchain = Arc::clone(&self.blockchain);
+            match self.blockchain.lock().unwrap().map.get(&c_parent){
+                Some(parent_block) => dify = parent_block.get_difficulty(), // May need to clone or dereference here
+                _=> println!("Invalid Parent Hash"),
+            }
+            let c_dify = dify.clone();
+            let new_block = generate_random_block_2(&c1_parent, &dify);
+            let block = new_block.clone();
+            
             // TODO for student: if block mining finished, you can have something like: self.finished_block_chan.send(block.clone()).expect("Send finished block error");
+            if new_block.hash() <= c_dify {
+                self.finished_block_chan.send(block.clone()).expect("Send finished block error");
+                self.blockchain.lock().unwrap().insert(&block);
+                parent = new_block.hash();
+                
+                // let e_blockchain = Arc::clone(&self.blockchain);
+                // let handle = thread::spawn(move || {
+                //     let mut chain = e_blockchain.lock().unwrap();
+                //     chain.insert(&block);
+                // });
+            }
+            
 
             if let OperatingState::Run(i) = self.operating_state {
                 if i != 0 {
