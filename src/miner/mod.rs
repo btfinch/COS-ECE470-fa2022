@@ -165,6 +165,7 @@ impl Context {
             if new_block.hash() <= c_dify {
                 self.finished_block_chan.send(block.clone()).expect("Send finished block error");
                 self.blockchain.lock().unwrap().insert(&block);
+                // println!("mod mined block");
                 parent = new_block.hash();
                 
                 // let e_blockchain = Arc::clone(&self.blockchain);

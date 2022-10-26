@@ -1,7 +1,11 @@
 use super::message::Message;
 use super::peer;
 use super::server::Handle as ServerHandle;
-use crate::types::hash::H256;
+use crate::types::hash::{H256, Hashable};
+
+use std::sync::{Arc, Mutex};
+use crate::blockchain::Blockchain;
+use crate::types::block::Block;
 
 use log::{debug, warn, error};
 
@@ -16,6 +20,7 @@ pub struct Worker {
     msg_chan: smol::channel::Receiver<(Vec<u8>, peer::Handle)>,
     num_worker: usize,
     server: ServerHandle,
+    blockchain: Arc<Mutex<Blockchain>>,
 }
 
 
@@ -24,11 +29,13 @@ impl Worker {
         num_worker: usize,
         msg_src: smol::channel::Receiver<(Vec<u8>, peer::Handle)>,
         server: &ServerHandle,
+        blockchain: &Arc<Mutex<Blockchain>>, // should this be a reference?
     ) -> Self {
         Self {
             msg_chan: msg_src,
             num_worker,
             server: server.clone(),
+            blockchain: Arc::clone(blockchain),
         }
     }
 
@@ -61,6 +68,80 @@ impl Worker {
                 Message::Pong(nonce) => {
                     debug!("Pong: {}", nonce);
                 }
+                Message::NewBlockHashes(nonce) => {
+                    let mut not_contained: Vec<H256> = Vec::new();
+                    for i in 0..nonce.len(){
+                        if !self.blockchain.lock().unwrap().map.contains_key(&nonce[i]){
+                            not_contained.push(nonce[i].clone());
+                        }
+                    }
+                    if !not_contained.clone().is_empty(){
+                        peer.write(Message::GetBlocks(not_contained));
+                    }
+
+                    println!("NewBlockHashes recieved");
+                     // should this be peer.write or server.broadcast
+                }
+                Message::GetBlocks(nonce) =>{
+                    let mut contained: Vec<Block> = Vec::new();
+                    for i in 0..nonce.len(){
+
+                        {
+                            if self.blockchain.lock().unwrap().map.contains_key(&nonce[i]){
+                                contained.push(self.blockchain.lock().unwrap().map[&nonce[i]].clone());
+                            }
+                            else {
+                                // println!("not contained in blockchain");
+                                // print!("{:?}",self.blockchain.lock().unwrap().all_blocks_in_longest_chain());
+                            }
+                        }
+                        /* 
+                        match self.blockchain.lock().unwrap().map.get(&nonce[i]){
+                            Some(block) => contained.push(block.clone()), // May need to clone or dereference here
+                            _=> println!("requested block not in blockchain"),
+                            
+                        }
+                        */
+                    }
+                    if !contained.clone().is_empty(){
+                        let cc = contained.clone();
+                        peer.write(Message::Blocks(contained));
+                        // println!("sent length {:?}",cc.len());
+                    }
+                    // println!("GetBlocks Request recieved");
+                    
+                }
+                Message::Blocks(nonce) =>{
+                    let mut new_blocks: Vec<H256> = Vec::new();
+                    for i in 0..nonce.len(){
+                        let hash = nonce[i].clone().hash();
+                        {
+                            let mut b_chain = self.blockchain.lock().unwrap();
+                            if !b_chain.map.contains_key(&hash){
+                                b_chain.insert(&nonce[i]);
+                                /* insert will print invalid parent hash if parent is not 
+                                contained in the blockchain, as this is right now blocks 
+                                need to come in the right order and have valid parent hashes
+                                */
+                                new_blocks.push(hash);
+
+                            }
+
+                        }
+                        
+                        
+                    }
+                    // print tip
+
+                    // println!("blocks recieved");
+                    {
+                        println!("{:?}",self.blockchain.lock().unwrap().tip());
+                    }
+                    if !new_blocks.clone().is_empty(){
+                        self.server.broadcast(Message::NewBlockHashes(new_blocks));
+                    }
+                    
+                }
                 _ => unimplemented!(),
             }
         }
@@ -90,9 +171,16 @@ impl TestMsgSender {
 fn generate_test_worker_and_start() -> (TestMsgSender, ServerTestReceiver, Vec<H256>) {
     let (server, server_receiver) = ServerHandle::new_for_test();
     let (test_msg_sender, msg_chan) = TestMsgSender::new();
-    let worker = Worker::new(1, msg_chan, &server);
+    let new_bc = Blockchain::new();
+    let wrapped_bc = Arc::new(Mutex::new(new_bc));
+    let worker = Worker::new(1, msg_chan, &server, &wrapped_bc);
+    let mut longest_chain_hashes: Vec<H256> = Vec::new();
+    {
+        longest_chain_hashes = wrapped_bc.lock().unwrap().all_blocks_in_longest_chain(); // probably could subsitute this with the genesis block hash directly
+    }
+
     worker.start(); 
-    (test_msg_sender, server_receiver, vec![])
+    (test_msg_sender, server_receiver, longest_chain_hashes)
 }
 
 // DO NOT CHANGE THIS COMMENT, IT IS FOR AUTOGRADER. BEFORE TEST

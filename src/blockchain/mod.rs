@@ -3,6 +3,9 @@ use crate::types::block::{Block, generate_random_block_1};
 use crate::types::hash::{H256, Hashable};
 use std::collections::HashMap;
 
+use crate::types::{merkle::MerkleTree, transaction::SignedTransaction,block::{Header,Content}};
+
+
 
 
 pub struct Blockchain {
@@ -16,10 +19,19 @@ pub struct Blockchain {
 impl Blockchain {
     /// Create a new blockchain, only containing the genesis block
     pub fn new() -> Self {
-        let mut new_map = HashMap::new();
         let zeros: [u8; 32] = [0;32];
-        let h_zeros: H256 = H256::from(zeros);
-        let genesis: Block = generate_random_block_1(&h_zeros);
+        let parent: H256 = H256::from(zeros);
+        
+        let mut new_map = HashMap::new();
+        let noncy: u32 = 1;
+        let dify: H256 = [255u8; 32].into();
+        let timy: u128 = 0;
+        let empty: Vec<H256> = Vec::new();
+        let merkly = MerkleTree::new(&empty).root();
+        let heady= Header{parent: parent, nonce: noncy, difficulty: dify, timestamp: timy, merkle_root: merkly};
+        let vec:Vec<SignedTransaction> = Vec::new();
+        let no_content = Content(vec);
+        let genesis = Block{header: heady, content: no_content};
         let genesis_hash = genesis.hash();
         let genesis_hash_copy = genesis_hash.clone();
         new_map.insert(genesis_hash, genesis);
