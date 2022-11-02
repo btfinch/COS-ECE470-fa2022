@@ -85,7 +85,7 @@ impl Worker {
                         peer.write(Message::GetBlocks(not_contained));
                     }
 
-                    println!("NewBlockHashes recieved");
+                    // println!("NewBlockHashes recieved");
                      // should this be peer.write or server.broadcast
                 }
                 Message::GetBlocks(nonce) =>{
@@ -138,6 +138,7 @@ impl Worker {
                                 if !b_chain.map.contains_key(&hash){
                                     if b_chain.map.contains_key(&parenty){
                                         if (difficy == b_chain.map[&parenty].header.difficulty) & (hash <= difficy){
+                                            // print!("New block Insterted!");
                                             b_chain.insert(&nonce[i]);
                                             new_blocks.push(hash.clone());
                                             // if any orphans have this block as the parent add them to reunited_orphans and remove frome orphan buffer

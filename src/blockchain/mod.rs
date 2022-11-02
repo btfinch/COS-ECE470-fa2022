@@ -2,6 +2,7 @@ use crate::miner::new;
 use crate::types::block::{Block, generate_random_block_1};
 use crate::types::hash::{H256, Hashable};
 use std::collections::HashMap;
+use hex_literal::hex;
 
 use crate::types::{merkle::MerkleTree, transaction::SignedTransaction,block::{Header,Content}};
 
@@ -24,7 +25,7 @@ impl Blockchain {
         
         let mut new_map = HashMap::new();
         let noncy: u32 = 1;
-        let dify: H256 = [255u8; 32].into();
+        let dify: H256 = hex!("00004fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff").into();
         let timy: u128 = 0;
         let empty: Vec<H256> = Vec::new();
         let merkly = MerkleTree::new(&empty).root();
@@ -71,6 +72,7 @@ impl Blockchain {
         let block_copy = block.clone();
 
         self.map.insert(block_hash, block_copy);
+        // println!("{:?}     ", block_level)
 
 
     }
