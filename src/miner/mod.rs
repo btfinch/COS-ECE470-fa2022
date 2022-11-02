@@ -97,8 +97,8 @@ impl Context {
 
     fn miner_loop(&mut self) {
 
-        let mut c_blockchain = Arc::clone(&self.blockchain); 
-        let mut parent = c_blockchain.lock().unwrap().tip();
+        // let mut c_blockchain = Arc::clone(&self.blockchain); 
+        let mut parent = self.blockchain.lock().unwrap().tip();
         // main mining loop
         loop {
             // check and react to control signals
@@ -158,6 +158,8 @@ impl Context {
                 _=> println!("Invalid Parent Hash"),
             }
             let c_dify = dify.clone();
+
+            // ****************** Will need to edit this line *********************
             let new_block = generate_random_block_2(&c1_parent, &dify);
             let block = new_block.clone();
             
@@ -166,14 +168,12 @@ impl Context {
                 self.finished_block_chan.send(block.clone()).expect("Send finished block error");
                 self.blockchain.lock().unwrap().insert(&block);
                 // println!("mod mined block");
-                parent = new_block.hash();
                 
-                // let e_blockchain = Arc::clone(&self.blockchain);
-                // let handle = thread::spawn(move || {
-                //     let mut chain = e_blockchain.lock().unwrap();
-                //     chain.insert(&block);
-                // });
             }
+            {
+                parent = self.blockchain.lock().unwrap().tip();
+            }
+            
             
 
             if let OperatingState::Run(i) = self.operating_state {

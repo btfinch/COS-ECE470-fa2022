@@ -6,6 +6,7 @@ use crate::types::hash::{H256, Hashable};
 use std::sync::{Arc, Mutex};
 use crate::blockchain::Blockchain;
 use crate::types::block::Block;
+use std::collections::HashMap;
 
 use log::{debug, warn, error};
 
@@ -29,7 +30,7 @@ impl Worker {
         num_worker: usize,
         msg_src: smol::channel::Receiver<(Vec<u8>, peer::Handle)>,
         server: &ServerHandle,
-        blockchain: &Arc<Mutex<Blockchain>>, // should this be a reference?
+        blockchain: &Arc<Mutex<Blockchain>>, 
     ) -> Self {
         Self {
             msg_chan: msg_src,
@@ -51,6 +52,9 @@ impl Worker {
     }
 
     fn worker_loop(&self) {
+        let mut orphan_buffer: HashMap<H256, Block> = HashMap::new();
+        let mut orphan_parents: Vec<H256> = Vec::new();
+        let mut orphan_children: Vec<H256> = Vec::new();
         loop {
             let result = smol::block_on(self.msg_chan.recv());
             if let Err(e) = result {
@@ -76,6 +80,8 @@ impl Worker {
                         }
                     }
                     if !not_contained.clone().is_empty(){
+                        // a precaution I could put in here is only request not_contained for blocks lower than constant difficulty threshold
+                        // this won't work however if difficulty is changing... This will reduce processing of invalid blocks
                         peer.write(Message::GetBlocks(not_contained));
                     }
 
@@ -111,26 +117,63 @@ impl Worker {
                     // println!("GetBlocks Request recieved");
                     
                 }
-                Message::Blocks(nonce) =>{
+                Message::Blocks(mut nonce) =>{
                     let mut new_blocks: Vec<H256> = Vec::new();
-                    for i in 0..nonce.len(){
-                        let hash = nonce[i].clone().hash();
-                        {
-                            let mut b_chain = self.blockchain.lock().unwrap();
-                            if !b_chain.map.contains_key(&hash){
-                                b_chain.insert(&nonce[i]);
-                                /* insert will print invalid parent hash if parent is not 
-                                contained in the blockchain, as this is right now blocks 
-                                need to come in the right order and have valid parent hashes
-                                */
-                                new_blocks.push(hash);
+                    let mut reunited_orphans: Vec<Block> = Vec::new();
+                    reunited_orphans.push(nonce[0].clone());
 
-                            }
+                    while !reunited_orphans.is_empty(){
+                    
+                        for child in 0..reunited_orphans.len(){
+                            nonce.insert(0, reunited_orphans[child].clone());
+                        }
+                        reunited_orphans.clear();
 
+                        for i in 0..nonce.len(){
+                            let hash = nonce[i].clone().hash();
+                            let parenty = nonce[i].clone().header.parent;
+                            let difficy = nonce[i].clone().header.difficulty;
+                            {
+                                let mut b_chain = self.blockchain.lock().unwrap();
+                                if !b_chain.map.contains_key(&hash){
+                                    if b_chain.map.contains_key(&parenty){
+                                        if (difficy == b_chain.map[&parenty].header.difficulty) & (hash <= difficy){
+                                            b_chain.insert(&nonce[i]);
+                                            new_blocks.push(hash.clone());
+                                            // if any orphans have this block as the parent add them to reunited_orphans and remove frome orphan buffer
+                                            if orphan_parents.contains(&hash){
+                                                for orph in 0..orphan_parents.len(){
+                                                    if orphan_parents[orph] == hash.clone(){
+                                                        reunited_orphans.push(orphan_buffer.remove(&orphan_children.remove(orph)).unwrap());
+                                                        orphan_parents.remove(orph);
+                                                    }
+                                                }
+
+                                            }
+                                        }
+                                    }
+                                    
+                                    else{
+                                        if (!orphan_buffer.contains_key(&hash)) & (hash <= difficy){
+                                            orphan_buffer.insert(hash.clone(), nonce[i].clone());
+                                            orphan_parents.push(parenty.clone());
+                                            orphan_children.push(hash);
+                                            // ask for parent whenever you insert a orphan into the buffer
+                                            // shouldn't you ask for the parents whenever you get a new block? 
+                                        }
+                                        if hash <= difficy { 
+                                            let mut missing_parent: Vec<H256> = Vec::new();
+                                            missing_parent.push(parenty.clone());
+                                            peer.write(Message::GetBlocks(missing_parent))
+                                        }
+                                        
+                                    }
+                                }   
+                            }   
+                            
                         }
                         
-                        
-                    }
+                    }   
                     // print tip
 
                     // println!("blocks recieved");
@@ -138,15 +181,16 @@ impl Worker {
                         println!("{:?}",self.blockchain.lock().unwrap().tip());
                     }
                     if !new_blocks.clone().is_empty(){
-                        self.server.broadcast(Message::NewBlockHashes(new_blocks));
+                        self.server.broadcast(Message::NewBlockHashes(new_blocks.clone()));
+                        // check orphan hashes
                     }
-                    
                 }
                 _ => unimplemented!(),
             }
         }
     }
 }
+
 
 #[cfg(any(test,test_utilities))]
 struct TestMsgSender {
