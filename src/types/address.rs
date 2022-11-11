@@ -3,7 +3,7 @@ use serde::{Serialize, Deserialize};
 
 // 20-byte address
 #[derive(Eq, PartialEq, Serialize, Deserialize, Clone, Hash, Default, Copy)]
-pub struct Address([u8; 20]);
+pub struct Address(pub [u8; 20]);
 
 // create Address from a slice of length 20, type u8
 impl std::convert::From<&[u8; 20]> for Address {
@@ -19,6 +19,8 @@ impl std::convert::From<[u8; 20]> for Address {
         Address(input)
     }
 }
+
+
 
 impl std::fmt::Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {

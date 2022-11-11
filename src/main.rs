@@ -7,8 +7,9 @@ pub mod blockchain;
 pub mod types;
 pub mod miner;
 pub mod network;
+pub mod txgen;
 
-use blockchain::Blockchain;
+use blockchain::{Blockchain, Mempool};
 use clap::clap_app;
 use smol::channel;
 use log::{error, info};
@@ -37,6 +38,10 @@ fn main() {
     stderrlog::new().verbosity(verbosity).init().unwrap();
     let blockchain = Blockchain::new();
     let blockchain = Arc::new(Mutex::new(blockchain));
+
+    let mempool = Mempool::new();
+    let mempool = Arc::new(Mutex::new(mempool));
+
     // parse p2p server address
     let p2p_addr = matches
         .value_of("peer_addr")
@@ -78,18 +83,27 @@ fn main() {
         msg_rx,
         &server,
         &blockchain,
+        &mempool,
         
     );
     worker_ctx.start();
 
     // start the miner
-    let (miner_ctx, miner, finished_block_chan) = miner::new(&blockchain);
+    let (miner_ctx, miner, finished_block_chan) = miner::new(&blockchain,&mempool);
 
     // new lines:
-
     let miner_worker_ctx = miner::worker::Worker::new(&server, finished_block_chan,&blockchain); // let miner_worker_ctx = miner::worker::Worker::new(&server, finished_block_chan);
     miner_ctx.start();
     miner_worker_ctx.start();
+
+    // start the generator
+    let (generator_ctx, generator, finished_tx_chan) = txgen::new(&mempool);
+
+    // new lines:
+    let generator_worker_ctx = txgen::worker::Worker::new(&server, finished_tx_chan,&mempool); // let miner_worker_ctx = miner::worker::Worker::new(&server, finished_block_chan);
+    generator_ctx.start();
+    generator_worker_ctx.start();
+
 
     // connect to known peers
     if let Some(known_peers) = matches.values_of("known_peer") {
@@ -129,6 +143,7 @@ fn main() {
     ApiServer::start(
         api_addr,
         &miner,
+        &generator,
         &server,
         &blockchain,
     );

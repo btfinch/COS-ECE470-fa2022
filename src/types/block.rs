@@ -49,6 +49,15 @@ impl Block {
     pub fn get_difficulty(&self) -> H256 {
         self.header.difficulty
     }
+
+    pub fn get_transactions(&self) -> Vec<H256> {
+        let mut output:Vec<H256> = vec!();
+        let Content(stx) = self.content.clone();
+        for i in stx.into_iter(){
+            output.push(i.hash());
+        }
+        output
+    }
 }
 
 pub fn generate_random_block_1(parent: &H256) -> Block {
@@ -67,15 +76,14 @@ pub fn generate_random_block_1(parent: &H256) -> Block {
 
 }
 
-pub fn generate_random_block_2(parent: &H256, difficulty: &H256) -> Block {
+pub fn generate_block(parent: &H256, difficulty: &H256, signed_transactions: &Vec<SignedTransaction>) -> Block {
     let noncy: u32 = rand::random();
     let timy = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
-    let empty: Vec<H256> = Vec::new();
-    let merkly = MerkleTree::new(&empty).root();
+    let content_duplicate = signed_transactions.clone();
+    let merkly = MerkleTree::new(&content_duplicate).root();
     let heady= Header{parent: *parent, nonce: noncy, difficulty: *difficulty, timestamp: timy, merkle_root: merkly};
-    let vec:Vec<SignedTransaction> = Vec::new();
-    let no_content = Content(vec);
-    let block = Block{header: heady, content: no_content};
+    let contenty = Content(signed_transactions.clone());
+    let block = Block{header: heady, content: contenty};
     block
 
 

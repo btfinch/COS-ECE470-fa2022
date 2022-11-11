@@ -1,5 +1,5 @@
 use crate::miner::new;
-use crate::types::block::{Block, generate_random_block_1};
+use crate::types::block::{Block, generate_random_block_1, self};
 use crate::types::hash::{H256, Hashable};
 use std::collections::HashMap;
 use hex_literal::hex;
@@ -17,6 +17,21 @@ pub struct Blockchain {
     pub tip_level: u64, //genesis, level 0
 }
 
+pub struct Mempool{
+    pub map: HashMap<H256, SignedTransaction>,
+}
+
+impl Mempool{
+    pub fn new() -> Self{
+        let mut new_map = HashMap::new();
+        Self {map: new_map}
+    }
+    pub fn insert(&mut self, st: &SignedTransaction) {
+        let st_hash = st.clone().hash();
+        self.map.insert(st_hash,st.clone());
+    }
+}
+
 impl Blockchain {
     /// Create a new blockchain, only containing the genesis block
     pub fn new() -> Self {
@@ -25,7 +40,7 @@ impl Blockchain {
         
         let mut new_map = HashMap::new();
         let noncy: u32 = 1;
-        let dify: H256 = hex!("00004fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff").into();
+        let dify: H256 = hex!("0009ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff").into();
         let timy: u128 = 0;
         let empty: Vec<H256> = Vec::new();
         let merkly = MerkleTree::new(&empty).root();
@@ -96,6 +111,18 @@ impl Blockchain {
         }
         new_vec
     }
+
+    // Get alll tx hashes in longest chain
+    pub fn all_tx_in_longest_chain(&self) -> Vec<Vec<H256>> {
+        let block_hashes = self.all_blocks_in_longest_chain();
+        let mut outer_vec: Vec<Vec<H256>> = vec!();
+        for block in block_hashes.into_iter(){
+            let temp_block = self.map.get(&block).unwrap();
+            outer_vec.push(temp_block.get_transactions());
+        }
+        outer_vec
+    }
+
 }
 
 // DO NOT CHANGE THIS COMMENT, IT IS FOR AUTOGRADER. BEFORE TEST

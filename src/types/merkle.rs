@@ -25,7 +25,7 @@ fn hash_pairs(old_vec:&Vec<H256>) -> Vec<H256>{
             let both_slice = both.as_slice();
             let both_hash = digest::digest(&digest::SHA256, both_slice);
             let hash_H256 = H256::from(both_hash);
-            println!("{:?}",hash_H256);
+            // println!("{:?}",hash_H256);
 
             // let hash_H256 = both_slice.hash(); ? Why doesn't this work?
             new_vec.push(hash_H256);

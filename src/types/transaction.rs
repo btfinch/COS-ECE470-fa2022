@@ -12,6 +12,7 @@ pub struct Transaction {
     sender: Address,
     reciever: Address,
     value: i32,
+    account_nonce: u32,
 
 }
 
@@ -22,6 +23,35 @@ pub struct SignedTransaction {
     public_key: Vec<u8>,
     
 }
+
+impl Transaction {
+    pub fn get_sender(&self) -> Address {
+        self.sender
+    }
+
+    pub fn get_reciever(&self) -> Address {
+        self.reciever
+    }
+    pub fn get_value(&self) -> i32 {
+        self.value
+    }
+    pub fn get_account_nonce(&self) -> u32 {
+        self.account_nonce
+    }
+}
+
+impl SignedTransaction {
+    pub fn get_transaction(&self) -> Transaction {
+        self.transaction.clone()
+    }
+    pub fn get_signature(&self) -> Vec<u8> {
+        self.signature.clone()
+    }
+    pub fn get_public_key(&self) -> Vec<u8> {
+        self.public_key.clone()
+    }
+}
+
 
 impl Hashable for SignedTransaction{
     fn hash(&self) -> H256 {
@@ -49,8 +79,31 @@ pub fn verify(t: &Transaction, public_key: &[u8], signature: &[u8]) -> bool {
     let serial_transaction = serde_json::to_string(t);
     let good_public_key = ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, public_key);
     good_public_key.verify(serial_transaction.unwrap().as_bytes(),signature).is_ok()
+ 
     
 }
+pub fn generate_random_transaction_1() -> (SignedTransaction) {
+    fn generate_random_address() -> (Address, Vec<u8>, Ed25519KeyPair){
+        let rng = ring::rand::SystemRandom::new();
+        let pkcs8_thing = ring::signature::Ed25519KeyPair::generate_pkcs8(&rng);
+        let key_pair     = ring::signature::Ed25519KeyPair::from_pkcs8(pkcs8_thing.unwrap().as_ref()).unwrap();
+        let public_key_bytes = key_pair.public_key();
+        let produced_public_key = public_key_bytes.clone().as_ref().to_vec();
+        let generated = Address::from_public_key_bytes(public_key_bytes.as_ref());
+        (generated, produced_public_key, key_pair)
+    }
+    let (address1, pub1, keys1) = generate_random_address();
+    let (address2, pub2, keys2) = generate_random_address();
+    let mut rng = rand::thread_rng();
+    let val: i32 = rng.gen();
+    let rand_transact = Transaction {sender: address1, reciever: address2, value: val, account_nonce: 0};
+    let tx_c = rand_transact.clone();
+    let signat = sign(&rand_transact,&keys1);
+    let signed_tx = SignedTransaction { transaction: tx_c, signature: pub1, public_key: sig_to_vec(signat) };
+    signed_tx
+    
+}
+
 use crate::types::address;
 #[cfg(any(test, test_utilities))]
 pub fn generate_random_transaction() -> Transaction {
@@ -66,7 +119,7 @@ pub fn generate_random_transaction() -> Transaction {
     let address2 = generate_random_address();
     let mut rng = rand::thread_rng();
     let val: i32 = rng.gen();
-    let rand_transact = Transaction {sender: address1, reciever: address2, value: val};
+    let rand_transact = Transaction {sender: address1, reciever: address2, value: val, account_nonce: 0};
     rand_transact
     
 }

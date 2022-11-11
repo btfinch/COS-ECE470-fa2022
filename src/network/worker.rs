@@ -2,9 +2,13 @@ use super::message::Message;
 use super::peer;
 use super::server::Handle as ServerHandle;
 use crate::types::hash::{H256, Hashable};
+use crate::types::transaction::{SignedTransaction};
+use crate::types::transaction;
+use crate::types::address::Address;
 
+use std::ops::Add;
 use std::sync::{Arc, Mutex};
-use crate::blockchain::Blockchain;
+use crate::blockchain::{Blockchain, Mempool};
 use crate::types::block::Block;
 use std::collections::HashMap;
 
@@ -22,6 +26,7 @@ pub struct Worker {
     num_worker: usize,
     server: ServerHandle,
     blockchain: Arc<Mutex<Blockchain>>,
+    mempool: Arc<Mutex<Mempool>>,
 }
 
 
@@ -31,12 +36,14 @@ impl Worker {
         msg_src: smol::channel::Receiver<(Vec<u8>, peer::Handle)>,
         server: &ServerHandle,
         blockchain: &Arc<Mutex<Blockchain>>, 
+        mempool: &Arc<Mutex<Mempool>>,
     ) -> Self {
         Self {
             msg_chan: msg_src,
             num_worker,
             server: server.clone(),
             blockchain: Arc::clone(blockchain),
+            mempool: Arc::clone(mempool),
         }
     }
 
@@ -186,6 +193,72 @@ impl Worker {
                         // check orphan hashes
                     }
                 }
+                Message::NewTransactionHashes(nonce) =>{
+                    let mut not_contained: Vec<H256> = Vec::new();
+                    for i in 0..nonce.len(){
+                        if !self.mempool.lock().unwrap().map.contains_key(&nonce[i]){
+                            not_contained.push(nonce[i].clone());
+                        }
+                    }
+                    if !not_contained.clone().is_empty(){
+                        // a precaution I could put in here is only request not_contained for blocks lower than constant difficulty threshold
+                        // this won't work however if difficulty is changing... This will reduce processing of invalid blocks
+                        peer.write(Message::GetTransactions(not_contained));
+                    }
+                }
+
+                Message::GetTransactions(nonce) =>{
+                    let mut contained: Vec<SignedTransaction> = Vec::new();
+                    for i in 0..nonce.len(){
+
+                        {
+                            if self.mempool.lock().unwrap().map.contains_key(&nonce[i]){
+                                contained.push(self.mempool.lock().unwrap().map[&nonce[i]].clone());
+                            }
+                            else {
+                                // println!("not contained in mempool");
+                            }
+                        }
+                    }
+                    if !contained.clone().is_empty(){
+                        let cc = contained.clone();
+                        peer.write(Message::Transactions(contained));
+                        // println!("sent length {:?}",cc.len());
+                    }
+                }
+
+                Message::Transactions(nonce) =>{
+                    // if transaction is verified, and it is not in the mempool already add it to the mempool:
+                    for i in 0..nonce.len(){
+                        let transaction = nonce[i].get_transaction().clone();
+                        let signature = nonce[i].get_signature().clone();
+                        let public_key = nonce[i].get_public_key().clone();
+                        let sender = transaction.get_sender().clone();
+
+                        let public_address = Address::from_public_key_bytes(public_key.as_ref()); // note this hashes the public key!
+
+                        let nonce_hash = nonce[i].clone().hash();
+
+                        let Address(compare_one) = sender;
+                        let Address(compare_two) = public_address;
+
+
+                        // NOTE: May need to mess around with the scope if you run into bugs !!!!
+                        {
+                            let mut mpool = self.mempool.lock().unwrap();
+                            if transaction::verify(&transaction, &public_key, &signature) & !mpool.map.contains_key(&nonce_hash) { // Is this & symbol working as expected?
+                                if compare_one == compare_two{
+                                    mpool.insert(&nonce[i]);
+                                }
+                                
+                            }
+                        }
+                    }
+
+
+
+                }
+                
                 _ => unimplemented!(),
             }
         }
@@ -218,7 +291,9 @@ fn generate_test_worker_and_start() -> (TestMsgSender, ServerTestReceiver, Vec<H
     let (test_msg_sender, msg_chan) = TestMsgSender::new();
     let new_bc = Blockchain::new();
     let wrapped_bc = Arc::new(Mutex::new(new_bc));
-    let worker = Worker::new(1, msg_chan, &server, &wrapped_bc);
+    let testpool = Mempool::new();
+    let wrapped_tp = Arc::new(Mutex::new(testpool));
+    let worker = Worker::new(1, msg_chan, &server, &wrapped_bc, &wrapped_tp);
     let mut longest_chain_hashes: Vec<H256> = Vec::new();
     {
         longest_chain_hashes = wrapped_bc.lock().unwrap().all_blocks_in_longest_chain(); // probably could subsitute this with the genesis block hash directly

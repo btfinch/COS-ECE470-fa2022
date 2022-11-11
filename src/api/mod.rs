@@ -1,6 +1,7 @@
 use serde::Serialize;
 use crate::blockchain::Blockchain;
 use crate::miner::Handle as MinerHandle;
+use crate::txgen::Handle as GeneratorHandle;
 use crate::network::server::Handle as NetworkServerHandle;
 use crate::network::message::Message;
 
@@ -16,6 +17,7 @@ use url::Url;
 pub struct Server {
     handle: HTTPServer,
     miner: MinerHandle,
+    generator: GeneratorHandle,
     network: NetworkServerHandle,
     blockchain: Arc<Mutex<Blockchain>>,
 }
@@ -51,6 +53,7 @@ impl Server {
     pub fn start(
         addr: std::net::SocketAddr,
         miner: &MinerHandle,
+        generator: &GeneratorHandle,
         network: &NetworkServerHandle,
         blockchain: &Arc<Mutex<Blockchain>>,
     ) {
@@ -58,12 +61,14 @@ impl Server {
         let server = Self {
             handle,
             miner: miner.clone(),
+            generator: generator.clone(),
             network: network.clone(),
             blockchain: Arc::clone(blockchain),
         };
         thread::spawn(move || {
             for req in server.handle.incoming_requests() {
                 let miner = server.miner.clone();
+                let generator = server.generator.clone();
                 let network = server.network.clone();
                 let blockchain = Arc::clone(&server.blockchain);
                 thread::spawn(move || {
@@ -102,8 +107,28 @@ impl Server {
                             respond_result!(req, true, "ok");
                         }
                         "/tx-generator/start" => {
-                            // unimplemented!()
-                            respond_result!(req, false, "unimplemented!");
+                            let params = url.query_pairs();
+                            let params: HashMap<_, _> = params.into_owned().collect();
+                            let lambda = match params.get("lambda") {
+                                Some(v) => v,
+                                None => {
+                                    respond_result!(req, false, "missing lambda");
+                                    return;
+                                }
+                            };
+                            let lambda = match lambda.parse::<u64>() {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    respond_result!(
+                                        req,
+                                        false,
+                                        format!("error parsing lambda: {}", e)
+                                    );
+                                    return;
+                                }
+                            };
+                            generator.start(lambda);
+                            respond_result!(req, true, "ok");
                         }
                         "/network/ping" => {
                             network.broadcast(Message::Ping(String::from("Test ping")));
@@ -116,8 +141,17 @@ impl Server {
                             respond_json!(req, v_string);
                         }
                         "/blockchain/longest-chain-tx" => {
-                            // unimplemented!()
-                            respond_result!(req, false, "unimplemented!");
+                            let blockchain = blockchain.lock().unwrap();
+                            let v = blockchain.all_tx_in_longest_chain();
+
+                            let mut v_big:Vec<Vec<String>>=Vec::new();
+
+                            for i in v.into_iter(){
+                                let v_string: Vec<String> = i.into_iter().map(|h|h.to_string()).collect();
+                                v_big.push(v_string);
+                            }
+                            
+                            respond_json!(req, v_big);
                         }
                         "/blockchain/longest-chain-tx-count" => {
                             // unimplemented!()
