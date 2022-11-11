@@ -99,7 +99,7 @@ pub fn generate_random_transaction_1() -> (SignedTransaction) {
     let rand_transact = Transaction {sender: address1, reciever: address2, value: val, account_nonce: 0};
     let tx_c = rand_transact.clone();
     let signat = sign(&rand_transact,&keys1);
-    let signed_tx = SignedTransaction { transaction: tx_c, signature: pub1, public_key: sig_to_vec(signat) };
+    let signed_tx = SignedTransaction { transaction: tx_c, signature:sig_to_vec(signat), public_key: pub1 };
     signed_tx
     
 }

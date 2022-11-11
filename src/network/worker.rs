@@ -201,8 +201,6 @@ impl Worker {
                         }
                     }
                     if !not_contained.clone().is_empty(){
-                        // a precaution I could put in here is only request not_contained for blocks lower than constant difficulty threshold
-                        // this won't work however if difficulty is changing... This will reduce processing of invalid blocks
                         peer.write(Message::GetTransactions(not_contained));
                     }
                 }
@@ -223,6 +221,7 @@ impl Worker {
                     if !contained.clone().is_empty(){
                         let cc = contained.clone();
                         peer.write(Message::Transactions(contained));
+                        // println!("Sent transactions")
                         // println!("sent length {:?}",cc.len());
                     }
                 }
@@ -247,7 +246,9 @@ impl Worker {
                         {
                             let mut mpool = self.mempool.lock().unwrap();
                             if transaction::verify(&transaction, &public_key, &signature) & !mpool.map.contains_key(&nonce_hash) { // Is this & symbol working as expected?
+                                // println!("verified");
                                 if compare_one == compare_two{
+                                    // println!("compared");
                                     mpool.insert(&nonce[i]);
                                 }
                                 
