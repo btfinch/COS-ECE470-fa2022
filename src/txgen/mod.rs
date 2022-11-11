@@ -22,7 +22,7 @@ use crate::types::block::{generate_block};
 
 
 enum ControlSignal {
-    Start(u64), // the number controls the lambda of interval between tx generation
+    Start(u64), // the number controls the theta of interval between tx generation
     Update, // update the tx 
     Exit,
 }
@@ -77,9 +77,9 @@ impl Handle {
         self.control_chan.send(ControlSignal::Exit).unwrap();
     }
 
-    pub fn start(&self, lambda: u64) {
+    pub fn start(&self, theta: u64) {
         self.control_chan
-            .send(ControlSignal::Start(lambda))
+            .send(ControlSignal::Start(theta))
             .unwrap();
     }
 
@@ -112,7 +112,7 @@ impl Context {
                             self.operating_state = OperatingState::ShutDown;
                         }
                         ControlSignal::Start(i) => {
-                            info!("Generator starting in continuous mode with lambda {}", i);
+                            info!("Generator starting in continuous mode with theta {}", i);
                             self.operating_state = OperatingState::Run(i);
                         }
                         ControlSignal::Update => {
@@ -132,7 +132,7 @@ impl Context {
                                 self.operating_state = OperatingState::ShutDown;
                             }
                             ControlSignal::Start(i) => {
-                                info!("Generator starting in continuous mode with lambda {}", i);
+                                info!("Generator starting in continuous mode with theta {}", i);
                                 self.operating_state = OperatingState::Run(i);
                             }
                             ControlSignal::Update => {
