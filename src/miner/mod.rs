@@ -19,6 +19,9 @@ use crate::types::hash::{H256, Hashable};
 
 use crate::types::block::{generate_block};
 
+use std::collections::HashMap;
+use crate::types::address::Address;
+
 
 enum ControlSignal {
     Start(u64), // the number controls the lambda of interval between block generation
@@ -106,7 +109,10 @@ impl Context {
     fn miner_loop(&mut self) {
 
         // let mut c_blockchain = Arc::clone(&self.blockchain); 
-        let mut parent = self.blockchain.lock().unwrap().tip();
+        let mut parent: H256;
+        {
+        parent = self.blockchain.lock().unwrap().tip();
+        }
         // main mining loop
 
         // ***** Creating initial vec of transactions w block parameters to mine *****
@@ -122,26 +128,50 @@ impl Context {
 
 
         loop {
+            let mut used_addresses: Vec<Address> = Vec::new();
             if flag <=1 {
-                // below might have lock for too long!
+                
+                {
+                    parent = self.blockchain.lock().unwrap().tip();
+                }
+
                 {
                     cont =0;
                     for (key, value) in self.mempool.lock().unwrap().map.clone().into_iter(){
-                        keys_to_remove.push(key.clone());
-                        cont = cont+1;
-                        if cont >= max_transaction_count{
-                            break;
+
+                        let mut block_state: HashMap<Address, (u32, u32)>;
+                        {
+                            block_state = self.blockchain.lock().unwrap().state_map.get(&parent.clone()).unwrap().clone();
                         }
+
+                        let transaction = value.get_transaction();
+                        let sendery = transaction.get_sender();
+                        let valuey = transaction.get_value();
+                        let acny = transaction.get_account_nonce();
+
+                        
+                        if block_state.contains_key(&sendery){
+                            let (send_an, send_bal) = *block_state.get(&sendery).unwrap();
+                            if acny==(send_an+1) {
+                                if valuey <= send_bal{
+                                    if !used_addresses.contains(&sendery.clone()){
+                                        keys_to_remove.push(key.clone());
+                                        used_addresses.push(sendery.clone());
+                                        cont = cont+1;
+                                        if cont >= max_transaction_count{
+                                            break;
+                                        }
+                                    }
+                                    
+                                } 
+                            }
+                        }
+                        
                     }
                 }
-
-                // how many keys to remove do we have?
-                println!("keys_to_remove_length!!! {:?}",keys_to_remove.len());
-
-
+                
                 for i in 0..keys_to_remove.len(){
-
-                    block_transactions.push(self.mempool.lock().unwrap().map.remove(&keys_to_remove[i]).unwrap());
+                    block_transactions.push(self.mempool.lock().unwrap().map.get(&keys_to_remove[i]).unwrap().clone());
                 }  
                 keys_to_remove.clear();
 
@@ -206,13 +236,13 @@ impl Context {
             let c_dify = dify.clone();
 
             
-            
+            let btclone = block_transactions.clone();
 
             let new_block = generate_block(&c1_parent, &dify, &block_transactions); // Am I handling the merkle stuff right in new_block?
             let block = new_block.clone();
             
             // TODO for student: if block mining finished, you can have something like: self.finished_block_chan.send(block.clone()).expect("Send finished block error");
-            if new_block.hash() <= c_dify {
+            if ((new_block.hash() <= c_dify) & !btclone.is_empty()){ 
                 self.finished_block_chan.send(block.clone()).expect("Send finished block error");
 
                 // this is duplicated is that a problem? (because miner worker also does this)
@@ -221,31 +251,80 @@ impl Context {
                 }
                 println!("mined block");
 
-                // Get new transactions to put in the block:
-                block_transactions.clear();
+                
+            }
+            let mut temp_parent: H256;
+            {
+                temp_parent = self.blockchain.lock().unwrap().tip();
+            }
+            
+            if !(temp_parent == parent){
+                // Clear the mempool of expired transactions:
+
                 {
-                    cont =0;
-                    for (key, value) in self.mempool.lock().unwrap().map.clone().into_iter(){
-                        keys_to_remove.push(key.clone());
-                        cont = cont+1;
-                        if cont >= max_transaction_count{
-                            break;
+                    let mut memorypool = self.mempool.lock().unwrap();
+                    for (key, value) in memorypool.map.clone().into_iter(){
+                        let transaction = value.get_transaction();
+                        let sendery = transaction.get_sender();
+                        let acny = transaction.get_account_nonce();
+
+                        let mut new_nonce: u32;
+                        {
+                            (new_nonce, _) = *self.blockchain.lock().unwrap().state_map.get(&temp_parent.clone()).unwrap().get(&sendery).unwrap();
                         }
+
+                        if acny <= new_nonce{
+                            memorypool.map.remove(&key);
+                        }
+
                     }
                 }
-                
-                for i in 0..keys_to_remove.len(){
-                    block_transactions.push(self.mempool.lock().unwrap().map.remove(&keys_to_remove[i]).unwrap());
-                }  
-                keys_to_remove.clear();
 
                 
+
+                parent = temp_parent.clone();
             }
+            
+            // Get new transactions to put in the block:
+            block_transactions.clear();
             {
-                parent = self.blockchain.lock().unwrap().tip();
+                cont =0;
+                for (key, value) in self.mempool.lock().unwrap().map.clone().into_iter(){
+
+                    let mut block_state: HashMap<Address, (u32, u32)>;
+                    {
+                        block_state = self.blockchain.lock().unwrap().state_map.get(&temp_parent.clone()).unwrap().clone();
+                    }
+
+                    let transaction = value.get_transaction();
+                    let sendery = transaction.get_sender();
+                    let valuey = transaction.get_value();
+                    let acny = transaction.get_account_nonce();
+
+                    if block_state.contains_key(&sendery){
+                        let (send_an, send_bal) = *block_state.get(&sendery).unwrap();
+                        if acny==(send_an+1) {
+                            if valuey <= send_bal{
+                                if !used_addresses.contains(&sendery){
+                                    keys_to_remove.push(key.clone());
+                                    used_addresses.push(sendery);
+                                    cont = cont+1;
+                                    if cont >= max_transaction_count{
+                                        break;
+                                    }
+                                }
+                                
+                            } 
+                        }
+                    }
+                    
+                }
             }
             
-            
+            for i in 0..keys_to_remove.len(){
+                block_transactions.push(self.mempool.lock().unwrap().map.get(&keys_to_remove[i]).unwrap().clone());
+            }  
+            keys_to_remove.clear();
 
             if let OperatingState::Run(i) = self.operating_state {
                 if i != 0 {

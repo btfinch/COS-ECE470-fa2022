@@ -154,9 +154,55 @@ impl Server {
                             respond_json!(req, v_big);
                         }
                         "/blockchain/longest-chain-tx-count" => {
-                            // unimplemented!()
+                            // unimplemented!() 
                             respond_result!(req, false, "unimplemented!");
                         }
+                        "/blockchain/state" => {
+                            let params = url.query_pairs();
+                            let params: HashMap<_, _> = params.into_owned().collect();
+                            let block = match params.get("block") {
+                                Some(v) => v,
+                                None => {
+                                    respond_result!(req, false, "missing block");
+                                    return;
+                                }
+                            };
+                            let block = match block.parse::<u64>() {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    respond_result!(
+                                        req,
+                                        false,
+                                        format!("error parsing block: {}", e)
+                                    );
+                                    return;
+                                }
+                            };
+
+                            let blockchain = blockchain.lock().unwrap();
+                            let longest_chain_vector = blockchain.all_blocks_in_longest_chain();
+                            let relevant_state = &*blockchain.state_map.get(&longest_chain_vector[(block as usize)]).unwrap();
+
+                            let mut string_vec:Vec<String>=Vec::new();
+                            for (addy, (account_noncy, balancy)) in relevant_state.clone().into_iter(){
+                                let mut stringed = addy.to_string().to_owned();
+                                let comma_space: String = ", ".to_owned();
+                                stringed.push_str(&comma_space.clone()); 
+                                let an_string = account_noncy.to_string().to_owned();
+                                stringed.push_str(&an_string);
+                                stringed.push_str(&comma_space);
+                                let b_string: String = balancy.to_string().to_owned();
+                                stringed.push_str(&b_string);
+                                string_vec.push(stringed);
+
+                            }
+                            
+                            respond_json!(req, string_vec);
+                            
+
+                            
+                        }
+                        
                         _ => {
                             let content_type =
                                 "Content-Type: application/json".parse::<Header>().unwrap();

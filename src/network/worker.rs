@@ -100,8 +100,9 @@ impl Worker {
                     for i in 0..nonce.len(){
 
                         {
-                            if self.blockchain.lock().unwrap().map.contains_key(&nonce[i]){
-                                contained.push(self.blockchain.lock().unwrap().map[&nonce[i]].clone());
+                            let blockychain = self.blockchain.lock().unwrap();
+                            if blockychain.map.contains_key(&nonce[i]){
+                                contained.push(blockychain.map[&nonce[i]].clone());
                             }
                             else {
                                 // println!("not contained in blockchain");
@@ -132,7 +133,7 @@ impl Worker {
                     while !reunited_orphans.is_empty(){
                     
                         for child in 0..reunited_orphans.len(){
-                            nonce.insert(0, reunited_orphans[child].clone());
+                            nonce.insert(0, reunited_orphans[child].clone()); // I think this will cause nonce to have the first block repeated, i don't think this is a problem?
                         }
                         reunited_orphans.clear();
 
@@ -140,24 +141,62 @@ impl Worker {
                             let hash = nonce[i].clone().hash();
                             let parenty = nonce[i].clone().header.parent;
                             let difficy = nonce[i].clone().header.difficulty;
+                            let this_block = nonce[i].clone();
                             {
+                                // might want to make it so it just get what it needs quickly from the bchain (don't copy the whole thing)
+
                                 let mut b_chain = self.blockchain.lock().unwrap();
                                 if !b_chain.map.contains_key(&hash){
                                     if b_chain.map.contains_key(&parenty){
                                         if (difficy == b_chain.map[&parenty].header.difficulty) & (hash <= difficy){
-                                            // print!("New block Insterted!");
-                                            b_chain.insert(&nonce[i]);
-                                            new_blocks.push(hash.clone());
-                                            // if any orphans have this block as the parent add them to reunited_orphans and remove frome orphan buffer
-                                            if orphan_parents.contains(&hash){
-                                                for orph in 0..orphan_parents.len(){
-                                                    if orphan_parents[orph] == hash.clone(){
-                                                        reunited_orphans.push(orphan_buffer.remove(&orphan_children.remove(orph)).unwrap());
-                                                        orphan_parents.remove(orph);
+                                            // check if all transactions in the block are valid
+                                            let mut block_state: HashMap<Address, (u32, u32)> = b_chain.state_map.get(&parenty.clone()).unwrap().clone();
+                                            // go through previous state and change the values in any account in which there was a transaction:
+                                            let block_details = this_block.get_transaction_details();
+
+                                            let mut validity_check = 0;
+
+                                            let mut used_senders: Vec<Address> = Vec::new();
+                                            for signed_t in block_details.into_iter(){
+                                                let transaction = signed_t.get_transaction();
+                                                let sendery = transaction.get_sender();
+                                                let valuey = transaction.get_value();
+                                                let acny = transaction.get_account_nonce();
+                                                if block_state.contains_key(&sendery){
+                                                    let (send_an, send_bal) = *block_state.get(&sendery).unwrap();
+                                                    if !acny==(send_an+1) {
+                                                        validity_check = validity_check +1; // indicates it's invalid
                                                     }
+                                                    if valuey > send_bal{
+                                                        validity_check = validity_check +1;
+                                                    }
+                                                    if used_senders.contains(&sendery.clone()){
+                                                        validity_check = validity_check +1;
+                                                    }
+                                                } else{
+                                                    validity_check = validity_check +1;
                                                 }
+                                                used_senders.push(sendery);
 
                                             }
+
+                                            if validity_check == 0{
+                                                // print!("New block Insterted!");
+                                                b_chain.insert(&nonce[i]);
+                                                new_blocks.push(hash.clone());
+                                                // if any orphans have this block as the parent add them to reunited_orphans and remove frome orphan buffer
+                                                if orphan_parents.contains(&hash){
+                                                    for orph in (0..orphan_parents.len()).rev(){ // reverse order here so indexes are not messed up hopefully
+                                                        if orphan_parents[orph] == hash.clone(){
+                                                            reunited_orphans.push(orphan_buffer.remove(&orphan_children.remove(orph)).unwrap());
+                                                            orphan_parents.remove(orph);
+                                                        }
+                                                    }
+
+                                                }
+                                            }
+
+
                                         }
                                     }
                                     
@@ -210,8 +249,9 @@ impl Worker {
                     for i in 0..nonce.len(){
 
                         {
-                            if self.mempool.lock().unwrap().map.contains_key(&nonce[i]){
-                                contained.push(self.mempool.lock().unwrap().map[&nonce[i]].clone());
+                            let memypool = self.mempool.lock().unwrap();
+                            if memypool.map.contains_key(&nonce[i].clone()){
+                                contained.push(memypool.map[&nonce[i].clone()].clone());
                             }
                             else {
                                 // println!("not contained in mempool");
@@ -234,6 +274,9 @@ impl Worker {
                         let public_key = nonce[i].get_public_key().clone();
                         let sender = transaction.get_sender().clone();
 
+                        let sender_clone = sender.clone();
+                        let proposed_an = transaction.get_account_nonce();
+
                         let public_address = Address::from_public_key_bytes(public_key.as_ref()); // note this hashes the public key!
 
                         let nonce_hash = nonce[i].clone().hash();
@@ -241,7 +284,7 @@ impl Worker {
                         let Address(compare_one) = sender;
                         let Address(compare_two) = public_address;
 
-
+                        
                         // NOTE: May need to mess around with the scope if you run into bugs !!!!
                         {
                             let mut mpool = self.mempool.lock().unwrap();
@@ -249,7 +292,22 @@ impl Worker {
                                 // println!("verified");
                                 if compare_one == compare_two{
                                     // println!("compared");
-                                    mpool.insert(&nonce[i]);
+                                    let mut tip_state: HashMap<Address, (u32, u32)>;
+                                    {
+                                        let tip_hash = self.blockchain.lock().unwrap().tip();
+                                        tip_state = self.blockchain.lock().unwrap().state_map.get(&tip_hash).unwrap().clone();
+                                    }
+                                    
+                                    if tip_state.contains_key(&sender_clone.clone()){
+                                        let (tip_account_nonce, send_balance) = *tip_state.get(&sender_clone).unwrap();
+                                        if proposed_an > tip_account_nonce{
+
+                                            mpool.insert(&nonce[i]);
+                                        }
+                                    }
+                                    
+                                    
+                                    
                                 }
                                 
                             }

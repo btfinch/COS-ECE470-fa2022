@@ -58,6 +58,11 @@ impl Block {
         }
         output
     }
+
+    pub fn get_transaction_details(&self) -> Vec<SignedTransaction>{
+        let Content(stx) = self.content.clone();
+        stx
+    }
 }
 
 pub fn generate_random_block_1(parent: &H256) -> Block {

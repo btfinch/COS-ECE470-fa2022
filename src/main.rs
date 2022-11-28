@@ -97,7 +97,7 @@ fn main() {
     miner_worker_ctx.start();
 
     // start the generator
-    let (generator_ctx, generator, finished_tx_chan) = txgen::new(&mempool);
+    let (generator_ctx, generator, finished_tx_chan) = txgen::new(&mempool,&blockchain, p2p_addr);
 
     // new lines:
     let generator_worker_ctx = txgen::worker::Worker::new(&server, finished_tx_chan,&mempool); // let miner_worker_ctx = miner::worker::Worker::new(&server, finished_block_chan);

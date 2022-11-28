@@ -11,7 +11,7 @@ use crate::types::hash::{H256, Hashable};
 pub struct Transaction {
     sender: Address,
     reciever: Address,
-    value: i32,
+    value: u32,
     account_nonce: u32,
 
 }
@@ -25,6 +25,12 @@ pub struct SignedTransaction {
 }
 
 impl Transaction {
+    pub fn new(sender: Address,
+        reciever: Address,
+        value: u32,
+        account_nonce: u32,) -> Self {
+        Self { sender: sender, reciever: reciever, value: value, account_nonce: account_nonce }
+    }
     pub fn get_sender(&self) -> Address {
         self.sender
     }
@@ -32,7 +38,7 @@ impl Transaction {
     pub fn get_reciever(&self) -> Address {
         self.reciever
     }
-    pub fn get_value(&self) -> i32 {
+    pub fn get_value(&self) -> u32 {
         self.value
     }
     pub fn get_account_nonce(&self) -> u32 {
@@ -41,6 +47,13 @@ impl Transaction {
 }
 
 impl SignedTransaction {
+    pub fn new(
+        transaction: Transaction,
+        signature: Vec<u8>,
+        public_key: Vec<u8>,
+    ) -> Self {
+        Self { transaction: transaction, signature: signature, public_key: public_key }
+    }
     pub fn get_transaction(&self) -> Transaction {
         self.transaction.clone()
     }
@@ -95,7 +108,7 @@ pub fn generate_random_transaction_1() -> (SignedTransaction) {
     let (address1, pub1, keys1) = generate_random_address();
     let (address2, pub2, keys2) = generate_random_address();
     let mut rng = rand::thread_rng();
-    let val: i32 = rng.gen();
+    let val: u32 = rng.gen();
     let rand_transact = Transaction {sender: address1, reciever: address2, value: val, account_nonce: 0};
     let tx_c = rand_transact.clone();
     let signat = sign(&rand_transact,&keys1);
@@ -118,7 +131,7 @@ pub fn generate_random_transaction() -> Transaction {
     let address1 = generate_random_address();
     let address2 = generate_random_address();
     let mut rng = rand::thread_rng();
-    let val: i32 = rng.gen();
+    let val: u32 = rng.gen();
     let rand_transact = Transaction {sender: address1, reciever: address2, value: val, account_nonce: 0};
     rand_transact
     
